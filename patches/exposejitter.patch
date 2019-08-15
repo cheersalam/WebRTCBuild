@@ -1,0 +1,83 @@
+diff --git a/api/stats/rtcstats_objects.h b/api/stats/rtcstats_objects.h
+index 842fca8cb2..1a6cdac2a2 100644
+--- a/api/stats/rtcstats_objects.h
++++ b/api/stats/rtcstats_objects.h
+@@ -415,6 +415,7 @@ class RTCOutboundRTPStreamStats final : public RTCRTPStreamStats {
+   // TODO(hbos): Collect and populate this value. https://bugs.webrtc.org/7066
+   RTCStatsMember<double> target_bitrate;
+   RTCStatsMember<uint32_t> frames_encoded;
++  RTCStatsMember<uint32_t> jitter;
+ };
+ 
+ // https://w3c.github.io/webrtc-stats/#transportstats-dict*
+diff --git a/media/base/mediachannel.h b/media/base/mediachannel.h
+index 2580c0d392..dbeeb6ea80 100644
+--- a/media/base/mediachannel.h
++++ b/media/base/mediachannel.h
+@@ -473,6 +473,7 @@ struct VideoSenderInfo : public MediaSenderInfo {
+   webrtc::VideoContentType content_type = webrtc::VideoContentType::UNSPECIFIED;
+   // https://w3c.github.io/webrtc-stats/#dom-rtcvideosenderstats-hugeframessent
+   uint32_t huge_frames_sent = 0;
++  uint32_t jitter = 0;
+ };
+ 
+ struct VideoReceiverInfo : public MediaReceiverInfo {
+diff --git a/media/engine/webrtcvideoengine.cc b/media/engine/webrtcvideoengine.cc
+index 2b20be059b..536710b33c 100644
+--- a/media/engine/webrtcvideoengine.cc
++++ b/media/engine/webrtcvideoengine.cc
+@@ -2081,6 +2081,8 @@ VideoSenderInfo WebRtcVideoChannel::WebRtcVideoSendStream::GetVideoSenderInfo(
+     info.firs_rcvd += stream_stats.rtcp_packet_type_counts.fir_packets;
+     info.nacks_rcvd += stream_stats.rtcp_packet_type_counts.nack_packets;
+     info.plis_rcvd += stream_stats.rtcp_packet_type_counts.pli_packets;
++    if (!stream_stats.is_rtx)
++      info.jitter = stream_stats.rtcp_stats.jitter;
+   }
+ 
+   if (!stats.substreams.empty()) {
+diff --git a/pc/rtcstatscollector.cc b/pc/rtcstatscollector.cc
+index 7d75ce8e53..f72004baa3 100644
+--- a/pc/rtcstatscollector.cc
++++ b/pc/rtcstatscollector.cc
+@@ -302,6 +302,7 @@ void SetOutboundRTPStreamStatsFromVideoSenderInfo(
+   if (video_sender_info.qp_sum)
+     outbound_video->qp_sum = *video_sender_info.qp_sum;
+   outbound_video->frames_encoded = video_sender_info.frames_encoded;
++  outbound_video->jitter = video_sender_info.jitter;
+ }
+ 
+ void ProduceCertificateStatsFromSSLCertificateStats(
+diff --git a/stats/rtcstats_objects.cc b/stats/rtcstats_objects.cc
+index 7b697f0f77..1185141747 100644
+--- a/stats/rtcstats_objects.cc
++++ b/stats/rtcstats_objects.cc
+@@ -644,7 +644,8 @@ WEBRTC_RTCSTATS_IMPL(
+     &packets_sent,
+     &bytes_sent,
+     &target_bitrate,
+-    &frames_encoded);
++    &frames_encoded,
++    &jitter);
+ // clang-format on
+ 
+ RTCOutboundRTPStreamStats::RTCOutboundRTPStreamStats(
+@@ -658,7 +659,8 @@ RTCOutboundRTPStreamStats::RTCOutboundRTPStreamStats(
+       packets_sent("packetsSent"),
+       bytes_sent("bytesSent"),
+       target_bitrate("targetBitrate"),
+-      frames_encoded("framesEncoded") {
++      frames_encoded("framesEncoded"),
++      jitter("jitter") {
+ }
+ 
+ RTCOutboundRTPStreamStats::RTCOutboundRTPStreamStats(
+@@ -667,7 +669,8 @@ RTCOutboundRTPStreamStats::RTCOutboundRTPStreamStats(
+       packets_sent(other.packets_sent),
+       bytes_sent(other.bytes_sent),
+       target_bitrate(other.target_bitrate),
+-      frames_encoded(other.frames_encoded) {
++      frames_encoded(other.frames_encoded),
++      jitter(other.jitter) {
+ }
+ 
+ RTCOutboundRTPStreamStats::~RTCOutboundRTPStreamStats() {

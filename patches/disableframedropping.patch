@@ -1,0 +1,30 @@
+diff --git a/video/video_stream_encoder.cc b/video/video_stream_encoder.cc
+index d4483b1b46..a161a45d98 100644
+--- a/video/video_stream_encoder.cc
++++ b/video/video_stream_encoder.cc
+@@ -565,6 +565,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
+   bool success = video_sender_.RegisterSendCodec(
+                      &codec, number_of_cores_,
+                      static_cast<uint32_t>(max_data_payload_length_)) == VCM_OK;
++  video_sender_.EnableFrameDropper(false);
+   if (!success) {
+     RTC_LOG(LS_ERROR) << "Failed to configure encoder.";
+     rate_allocator_.reset();
+@@ -693,7 +694,7 @@ void VideoStreamEncoder::OnFrame(const VideoFrame& video_frame) {
+         const int posted_frames_waiting_for_encode =
+             posted_frames_waiting_for_encode_.fetch_sub(1);
+         RTC_DCHECK_GT(posted_frames_waiting_for_encode, 0);
+-        if (posted_frames_waiting_for_encode == 1) {
++        if (true) {
+           MaybeEncodeVideoFrame(incoming_frame, post_time_us);
+         } else {
+           // There is a newer frame in flight. Do not encode this frame.
+@@ -804,7 +805,7 @@ void VideoStreamEncoder::MaybeEncodeVideoFrame(const VideoFrame& video_frame,
+   initial_rampup_ = kMaxInitialFramedrop;
+ 
+ 
+-  if (EncoderPaused()) {
++  if (false) {
+     // Storing references to a native buffer risks blocking frame capture.
+     if (video_frame.video_frame_buffer()->type() !=
+         VideoFrameBuffer::Type::kNative) {

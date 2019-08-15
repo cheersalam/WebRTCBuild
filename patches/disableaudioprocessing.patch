@@ -1,0 +1,188 @@
+diff --git a/audio/audio_transport_impl.cc b/audio/audio_transport_impl.cc
+index f9b0311ccb..950f5e310d 100644
+--- a/audio/audio_transport_impl.cc
++++ b/audio/audio_transport_impl.cc
+@@ -23,44 +23,6 @@ namespace webrtc {
+ 
+ namespace {
+ 
+-// We want to process at the lowest sample rate and channel count possible
+-// without losing information. Choose the lowest native rate at least equal to
+-// the minimum of input and codec rates, choose lowest channel count, and
+-// configure the audio frame.
+-void InitializeCaptureFrame(int input_sample_rate,
+-                            int send_sample_rate_hz,
+-                            size_t input_num_channels,
+-                            size_t send_num_channels,
+-                            AudioFrame* audio_frame) {
+-  RTC_DCHECK(audio_frame);
+-  int min_processing_rate_hz = std::min(input_sample_rate, send_sample_rate_hz);
+-  for (int native_rate_hz : AudioProcessing::kNativeSampleRatesHz) {
+-    audio_frame->sample_rate_hz_ = native_rate_hz;
+-    if (audio_frame->sample_rate_hz_ >= min_processing_rate_hz) {
+-      break;
+-    }
+-  }
+-  audio_frame->num_channels_ = std::min(input_num_channels, send_num_channels);
+-}
+-
+-void ProcessCaptureFrame(uint32_t delay_ms,
+-                         bool key_pressed,
+-                         bool swap_stereo_channels,
+-                         AudioProcessing* audio_processing,
+-                         AudioFrame* audio_frame) {
+-  RTC_DCHECK(audio_processing);
+-  RTC_DCHECK(audio_frame);
+-  RTC_DCHECK(
+-      !audio_processing->echo_cancellation()->is_drift_compensation_enabled());
+-  audio_processing->set_stream_delay_ms(delay_ms);
+-  audio_processing->set_stream_key_pressed(key_pressed);
+-  int error = audio_processing->ProcessStream(audio_frame);
+-  RTC_DCHECK_EQ(0, error) << "ProcessStream() error: " << error;
+-  if (swap_stereo_channels) {
+-    AudioFrameOperations::SwapStereoChannels(audio_frame);
+-  }
+-}
+-
+ // Resample audio in |frame| to given sample rate preserving the
+ // channel count and place the result in |destination|.
+ int Resample(const AudioFrame& frame,
+@@ -110,9 +72,7 @@ int32_t AudioTransportImpl::RecordedDataIsAvailable(
+   RTC_DCHECK_EQ(2 * number_of_channels, bytes_per_sample);
+   RTC_DCHECK_GE(sample_rate, AudioProcessing::NativeRate::kSampleRate8kHz);
+   // 100 = 1 second / data duration (10 ms).
+-  RTC_DCHECK_EQ(number_of_frames * 100, sample_rate);
+-  RTC_DCHECK_LE(bytes_per_sample * number_of_frames * number_of_channels,
+-                AudioFrame::kMaxDataSizeBytes);
++  RTC_DCHECK_LE(number_of_frames, AudioFrame::kMaxDataSizeBytes);
+ 
+   int send_sample_rate_hz = 0;
+   size_t send_num_channels = 0;
+@@ -124,37 +84,24 @@ int32_t AudioTransportImpl::RecordedDataIsAvailable(
+     swap_stereo_channels = swap_stereo_channels_;
+   }
+ 
+-  std::unique_ptr<AudioFrame> audio_frame(new AudioFrame());
+-  InitializeCaptureFrame(sample_rate, send_sample_rate_hz,
+-                         number_of_channels, send_num_channels,
+-                         audio_frame.get());
+-  voe::RemixAndResample(static_cast<const int16_t*>(audio_data),
+-                        number_of_frames, number_of_channels, sample_rate,
+-                        &capture_resampler_, audio_frame.get());
+-  ProcessCaptureFrame(audio_delay_milliseconds, key_pressed,
+-                      swap_stereo_channels, audio_processing_,
+-                      audio_frame.get());
+-
+-  // Typing detection (utilizes the APM/VAD decision). We let the VAD determine
+-  // if we're using this feature or not.
+-  // TODO(solenberg): is_enabled() takes a lock. Work around that.
+-  bool typing_detected = false;
+-  if (audio_processing_->voice_detection()->is_enabled()) {
+-    if (audio_frame->vad_activity_ != AudioFrame::kVadUnknown) {
+-      bool vad_active = audio_frame->vad_activity_ == AudioFrame::kVadActive;
+-      typing_detected = typing_detection_.Process(key_pressed, vad_active);
+-    }
++  if (send_num_channels != number_of_channels || send_sample_rate_hz != static_cast<int>(sample_rate))
++  {
++    return -1;
+   }
+ 
+-  // Measure audio level of speech after all processing.
+-  double sample_duration = static_cast<double>(number_of_frames) / sample_rate;
+-  audio_level_.ComputeLevel(*audio_frame.get(), sample_duration);
++  std::unique_ptr<AudioFrame> audio_frame(new AudioFrame());
++  audio_frame->sample_rate_hz_ = send_sample_rate_hz;
++  audio_frame->num_channels_ = send_num_channels;
++  audio_frame->samples_per_channel_ = send_sample_rate_hz/100;
++  *((size_t*)(audio_frame->mutable_data())) = number_of_frames;
++  std::copy_n(reinterpret_cast<const char*>(audio_data), number_of_frames,
++              reinterpret_cast<char*>(audio_frame->mutable_data()) + sizeof(size_t));
+ 
+   // Copy frame and push to each sending stream. The copy is required since an
+   // encoding task will be posted internally to each stream.
+   {
+     rtc::CritScope lock(&capture_lock_);
+-    typing_noise_detected_ = typing_detected;
++    typing_noise_detected_ = false;
+ 
+     RTC_DCHECK_GT(audio_frame->samples_per_channel_, 0);
+     if (!sending_streams_.empty()) {
+diff --git a/audio/channel.cc b/audio/channel.cc
+index df34ca22ce..6d47cd9677 100644
+--- a/audio/channel.cc
++++ b/audio/channel.cc
+@@ -1248,19 +1248,8 @@ void Channel::ProcessAndEncodeAudioOnTaskQueue(AudioFrame* audio_input) {
+                              audio_input->ElapsedProfileTimeMs());
+ 
+   bool is_muted = InputMute();
+-  AudioFrameOperations::Mute(audio_input, previous_frame_muted_, is_muted);
+-
+-  if (_includeAudioLevelIndication) {
+-    size_t length =
+-        audio_input->samples_per_channel_ * audio_input->num_channels_;
+-    RTC_CHECK_LE(length, AudioFrame::kMaxDataSizeBytes);
+-    if (is_muted && previous_frame_muted_) {
+-      rms_level_.AnalyzeMuted(length);
+-    } else {
+-      rms_level_.Analyze(
+-          rtc::ArrayView<const int16_t>(audio_input->data(), length));
+-    }
+-  }
++  if(is_muted)
++    return;
+   previous_frame_muted_ = is_muted;
+ 
+   // Add 10ms of raw (PCM) audio data to the encoder @ 32kHz.
+diff --git a/modules/audio_coding/acm2/audio_coding_module.cc b/modules/audio_coding/acm2/audio_coding_module.cc
+index 4545810b56..9b120f2835 100644
+--- a/modules/audio_coding/acm2/audio_coding_module.cc
++++ b/modules/audio_coding/acm2/audio_coding_module.cc
+@@ -333,25 +333,6 @@ int DownMix(const AudioFrame& frame,
+   return 0;
+ }
+ 
+-// Mono-to-stereo can be used as in-place.
+-int UpMix(const AudioFrame& frame, size_t length_out_buff, int16_t* out_buff) {
+-  RTC_DCHECK_EQ(frame.num_channels_, 1);
+-  RTC_DCHECK_GE(length_out_buff, 2 * frame.samples_per_channel_);
+-
+-  if (!frame.muted()) {
+-    const int16_t* frame_data = frame.data();
+-    for (size_t n = frame.samples_per_channel_; n != 0; --n) {
+-      size_t i = n - 1;
+-      int16_t sample = frame_data[i];
+-      out_buff[2 * i + 1] = sample;
+-      out_buff[2 * i] = sample;
+-    }
+-  } else {
+-    std::fill(out_buff, out_buff + frame.samples_per_channel_ * 2, 0);
+-  }
+-  return 0;
+-}
+-
+ void ConvertEncodedInfoToFragmentationHeader(
+     const AudioEncoder::EncodedInfo& info,
+     RTPFragmentationHeader* frag) {
+@@ -708,13 +689,7 @@ int AudioCodingModuleImpl::Add10MsDataInternal(const AudioFrame& audio_frame,
+       ptr_frame->num_channels_ == current_num_channels;
+ 
+   if (!same_num_channels) {
+-    if (ptr_frame->num_channels_ == 1) {
+-      if (UpMix(*ptr_frame, WEBRTC_10MS_PCM_AUDIO, input_data->buffer) < 0)
+-        return -1;
+-    } else {
+-      if (DownMix(*ptr_frame, WEBRTC_10MS_PCM_AUDIO, input_data->buffer) < 0)
+-        return -1;
+-    }
++    return -1;
+   }
+ 
+   // When adding data to encoders this pointer is pointing to an audio buffer
+@@ -785,6 +760,7 @@ int AudioCodingModuleImpl::PreprocessToAddData(const AudioFrame& in_frame,
+     expected_codec_ts_ += static_cast<uint32_t>(in_frame.samples_per_channel_);
+     return 0;
+   }
++  return -1;
+ 
+   *ptr_out = &preprocess_frame_;
+   preprocess_frame_.num_channels_ = in_frame.num_channels_;

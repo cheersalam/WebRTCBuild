@@ -1,0 +1,53 @@
+diff --git a/modules/congestion_controller/goog_cc/probe_controller.cc b/modules/congestion_controller/goog_cc/probe_controller.cc
+index c05c094c2c..40a33086a0 100644
+--- a/modules/congestion_controller/goog_cc/probe_controller.cc
++++ b/modules/congestion_controller/goog_cc/probe_controller.cc
+@@ -290,7 +290,7 @@ void ProbeController::Process(int64_t at_time_ms) {
+         std::max(*alr_start_time_ms_, time_last_probing_initiated_ms_) +
+         kAlrPeriodicProbingIntervalMs;
+     if (now_ms >= next_probe_time_ms) {
+-      InitiateProbing(now_ms, {estimated_bitrate_bps_ * 2}, true);
++      InitiateProbing(now_ms, {std::max(3000000ll, estimated_bitrate_bps_ * 2)}, true);
+     }
+   }
+ }
+diff --git a/modules/congestion_controller/probe_controller.cc b/modules/congestion_controller/probe_controller.cc
+index ea1f45ca5b..08c1c330d7 100644
+--- a/modules/congestion_controller/probe_controller.cc
++++ b/modules/congestion_controller/probe_controller.cc
+@@ -292,7 +292,7 @@ void ProbeController::Process() {
+         std::max(*alr_start_time, time_last_probing_initiated_ms_) +
+         kAlrPeriodicProbingIntervalMs;
+     if (now_ms >= next_probe_time_ms) {
+-      InitiateProbing(now_ms, {estimated_bitrate_bps_ * 2}, true);
++      InitiateProbing(now_ms, {std::max(3000000ll, estimated_bitrate_bps_ * 2)}, true);
+     }
+   }
+ }
+diff --git a/rtc_base/experiments/alr_experiment.cc b/rtc_base/experiments/alr_experiment.cc
+index c69caed787..0a140f6a6c 100644
+--- a/rtc_base/experiments/alr_experiment.cc
++++ b/rtc_base/experiments/alr_experiment.cc
+@@ -22,7 +22,6 @@ const char AlrExperimentSettings::kScreenshareProbingBweExperimentName[] =
+     "WebRTC-ProbingScreenshareBwe";
+ const char AlrExperimentSettings::kStrictPacingAndProbingExperimentName[] =
+     "WebRTC-StrictPacingAndProbing";
+-const char kDefaultProbingScreenshareBweSettings[] = "1.0,2875,80,40,-60,3";
+ 
+ bool AlrExperimentSettings::MaxOneFieldTrialEnabled() {
+   return field_trial::FindFullName(kStrictPacingAndProbingExperimentName)
+@@ -43,14 +42,6 @@ AlrExperimentSettings::CreateFromFieldTrial(const char* experiment_name) {
+     group_name.resize(group_name.length() - kIgnoredSuffix.length());
+   }
+ 
+-  if (experiment_name == kScreenshareProbingBweExperimentName) {
+-    // This experiment is now default-on with fixed settings.
+-    // TODO(sprang): Remove this kill-switch and clean up experiment code.
+-    if (group_name != "Disabled") {
+-      group_name = kDefaultProbingScreenshareBweSettings;
+-    }
+-  }
+-
+   if (group_name.empty())
+     return ret;
+ 

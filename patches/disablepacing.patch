@@ -1,0 +1,15 @@
+diff --git a/modules/pacing/paced_sender.cc b/modules/pacing/paced_sender.cc
+index f8383187a9..e03cd485e9 100644
+--- a/modules/pacing/paced_sender.cc
++++ b/modules/pacing/paced_sender.cc
+@@ -361,10 +361,6 @@ void PacedSender::ProcessThreadAttached(ProcessThread* process_thread) {
+ bool PacedSender::SendPacket(const PacketQueueInterface::Packet& packet,
+                              const PacedPacketInfo& pacing_info) {
+   RTC_DCHECK(!paused_);
+-  if (media_budget_->bytes_remaining() == 0 &&
+-      pacing_info.probe_cluster_id == PacedPacketInfo::kNotAProbe) {
+-    return false;
+-  }
+ 
+   critsect_.Leave();
+   const bool success = packet_sender_->TimeToSendPacket(

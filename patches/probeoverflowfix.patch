@@ -1,0 +1,13 @@
+diff --git a/modules/pacing/bitrate_prober.cc b/modules/pacing/bitrate_prober.cc
+index 7f60207f3e..af1b31a959 100644
+--- a/modules/pacing/bitrate_prober.cc
++++ b/modules/pacing/bitrate_prober.cc
+@@ -30,7 +30,7 @@ constexpr int kMinProbeDeltaMs = 1;
+ constexpr int kMinProbePacketsSent = 5;
+ 
+ // The minimum probing duration in ms.
+-constexpr int kMinProbeDurationMs = 15;
++constexpr int64_t kMinProbeDurationMs = 15;
+ 
+ // Maximum amount of time each probe can be delayed. Probe cluster is reset and
+ // retried from the start when this limit is reached.
