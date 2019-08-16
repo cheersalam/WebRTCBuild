@@ -3,6 +3,13 @@
 # Add steps that build, run tests, deploy, and more:
 # https://aka.ms/yaml
 
+
+variables:
+  Major: '0'
+  Minor: '1'
+  Patch: '0'
+
+
 trigger:
 - master
 
@@ -21,3 +28,19 @@ steps:
   inputs:
     path: $(System.DefaultWorkingDirectory)/build-windows-x86_32
     artifact: WebRTC-windows-z86_32
+
+- task: NuGetCommand@2
+  inputs:
+    command: pack
+    versioningScheme: byPrereleaseNumber
+    majorVersion: '$(Major)'
+    minorVersion: '$(Minor)'
+    patchVersion: '$(Patch)'
+    packagesToPack: $(System.DefaultWorkingDirectory)/build-windows-x86_32
+
+- task: NuGetCommand@2
+  displayName: 'NuGet push'
+  inputs:
+    command: push
+    publishVstsFeed: 'WebRTC-windows-z86_32'
+    allowPackageConflicts: true
