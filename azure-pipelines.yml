@@ -42,5 +42,5 @@ steps:
   displayName: 'NuGet push'
   inputs:
     command: push
-    publishVstsFeed: 'WebRTC-windows-z86_32'
+    publishVstsFeed: 'WebRTC-windows-x86_32'
     allowPackageConflicts: true
