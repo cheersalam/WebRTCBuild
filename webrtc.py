@@ -64,12 +64,12 @@ def build(arch, build):
         subprocess.check_call("git checkout -b release refs/remotes/branch-heads/68", cwd=getSrcPath(), shell=True)
 
     subprocess.check_call("gclient sync", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/probeoverflowfix.patch", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/disableframedropping.patch", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/disableaudioprocessing.patch", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/exposejitter.patch", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/disablepacing.patch", cwd=getSrcPath(), shell=True)
-    subprocess.call("git apply --ignore-whitespace patches/fasterprobing.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/probeoverflowfix.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/disableframedropping.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/disableaudioprocessing.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/exposejitter.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/disablepacing.patch", cwd=getSrcPath(), shell=True)
+    subprocess.call("git apply --ignore-whitespace ../patches/fasterprobing.patch", cwd=getSrcPath(), shell=True)
 
     try:
         os.makedirs(os.path.dirname(getArgsPath(target_arch)))
